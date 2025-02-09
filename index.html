@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <title>Outil interactif de corrélation</title>
+  <!-- Import de p5.js -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.5.0/lib/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f4f4f4;
+      font-family: sans-serif;
+    }
+    #header {
+      text-align: center;
+      padding: 1em 0;
+    }
+    #header h1 {
+      margin: 0.2em 0;
+    }
+    #header button {
+      padding: 0.5em 1em;
+      margin: 0.5em;
+      cursor: pointer;
+    }
+    #header p {
+      margin: 0.2em;
+    }
+    /* Pour que le canevas p5.js soit centré */
+    .canvas-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>Outil interactif de corrélation</h1>
+    <button id="btnOutlier">Ajouter un outlier</button>
+    <p>Corrélation (r) : <span id="corrValue">0</span></p>
+  </div>
+
+  <div class="canvas-container">
+    <!-- Le canevas p5.js sera généré ici -->
+  </div>
+
+  <script>
+    // -------------------------
+    // Variables globales
+    // -------------------------
+    let points = [];       // Liste de points {x, y, isDragging}
+    let radius = 8;        // Taille visuelle d'un point
+    let selectedPoint = null; // Le point actuellement en train d'être déplacé
+
+    // Dimensions du canevas
+    let canvasWidth = 600;
+    let canvasHeight = 400;
+
+    // -------------------------
+    // p5.js : setup()
+    // -------------------------
+    function setup() {
+      // Crée le canevas p5 dans la div .canvas-container
+      let cnv = createCanvas(canvasWidth, canvasHeight);
+      cnv.parent(document.querySelector('.canvas-container'));
+
+      // Initialiser quelques points aléatoires
+      for (let i = 0; i < 10; i++) {
+        points.push({
+          x: random(50, canvasWidth - 50),
+          y: random(50, canvasHeight - 50),
+          isDragging: false
+        });
+      }
+
+      // Mise en place de l'écouteur "Ajouter un outlier"
+      document.getElementById('btnOutlier').addEventListener('click', addOutlier);
+    }
+
+    // -------------------------
+    // p5.js : draw()
+    // -------------------------
+    function draw() {
+      background(255);
+
+      // Affiche le nuage de points et gère le drag & drop
+      displayAndDragPoints();
+
+      // Calcul et affichage de la corrélation
+      let r = computePearsonCorrelation(points);
+      document.getElementById('corrValue').innerText = r.toFixed(3);
+
+      // (Optionnel) Dessiner la droite de régression linéaire
+      drawRegressionLine(points);
+    }
+
+    // -------------------------
+    // Gérer l'affichage et le drag des points
+    // -------------------------
+    function displayAndDragPoints() {
+      for (let i = 0; i < points.length; i++) {
+        let pt = points[i];
+
+        // Si c'est le point sélectionné, on le suit avec la souris
+        if (pt.isDragging) {
+          pt.x = mouseX;
+          pt.y = mouseY;
+        }
+
+        // Dessiner chaque point
+        noStroke();
+        fill(0, 150, 255);
+        circle(pt.x, pt.y, radius * 2);
+      }
+    }
+
+    function mousePressed() {
+      // Lorsque l'utilisateur clique, on vérifie si un point est sous la souris
+      for (let i = points.length - 1; i >= 0; i--) {
+        let pt = points[i];
+        let d = dist(mouseX, mouseY, pt.x, pt.y);
+        if (d < radius) {
+          pt.isDragging = true;
+          selectedPoint = pt;
+          break;
+        }
+      }
+    }
+
+    function mouseReleased() {
+      // On arrête de déplacer le point
+      if (selectedPoint) {
+        selectedPoint.isDragging = false;
+        selectedPoint = null;
+      }
+    }
+
+    // -------------------------
+    // Fonction pour ajouter un outlier
+    // -------------------------
+    function addOutlier() {
+      // On génère un point très éloigné pour illustrer l'effet d'un outlier
+      let outlier = {
+        x: random(50, canvasWidth - 50),
+        y: random(50, canvasHeight - 50),
+        isDragging: false
+      };
+
+      // Forçons, par exemple, un x ou y beaucoup plus grand
+      // (pour montrer un "vrai" outlier)
+      if (random() < 0.5) {
+        outlier.x = canvasWidth + random(50, 150);
+      } else {
+        outlier.y = canvasHeight + random(50, 150);
+      }
+      points.push(outlier);
+    }
+
+    // -------------------------
+    // Calcul de la corrélation de Pearson
+    // -------------------------
+    function computePearsonCorrelation(data) {
+      if (data.length < 2) {
+        return 0; // pas assez de points
+      }
+      // Extraire X et Y
+      let xVals = data.map(p => p.x);
+      let yVals = data.map(p => p.y);
+
+      let meanX = average(xVals);
+      let meanY = average(yVals);
+
+      let num = 0;  // Covariance X,Y
+      let denX = 0; // Variance X
+      let denY = 0; // Variance Y
+
+      for (let i = 0; i < data.length; i++) {
+        let x = xVals[i];
+        let y = yVals[i];
+        let dx = x - meanX;
+        let dy = y - meanY;
+        num  += dx * dy;
+        denX += dx * dx;
+        denY += dy * dy;
+      }
+
+      let den = sqrt(denX * denY);
+      if (den === 0) {
+        return 0;
+      }
+      return num / den;
+    }
+
+    function average(arr) {
+      let sum = 0;
+      for (let i = 0; i < arr.length; i++) {
+        sum += arr[i];
+      }
+      return sum / arr.length;
+    }
+
+    // -------------------------
+    // Dessin de la droite de régression linéaire (optionnel)
+    // -------------------------
+    function drawRegressionLine(data) {
+      if (data.length < 2) return;
+
+      // Calcul de la pente et de l'ordonnée à l'origine
+      let xVals = data.map(p => p.x);
+      let yVals = data.map(p => p.y);
+
+      let meanX = average(xVals);
+      let meanY = average(yVals);
+
+      let num = 0;
+      let den = 0;
+      for (let i = 0; i < data.length; i++) {
+        num += (xVals[i] - meanX) * (yVals[i] - meanY);
+        den += (xVals[i] - meanX) * (xVals[i] - meanX);
+      }
+      if (den === 0) return; // tous les points ont le même X
+
+      let slope = num / den;
+      let intercept = meanY - slope * meanX;
+
+      // Calculer deux points extrêmes sur la droite
+      // On prend x=0 et x=canvasWidth, puis on calcule y
+      let x1 = 0;
+      let y1 = intercept + slope * x1;
+      let x2 = canvasWidth;
+      let y2 = intercept + slope * x2;
+
+      stroke(255, 0, 0);
+      strokeWeight(2);
+      line(x1, y1, x2, y2);
+    }
+  </script>
+</body>
+</html>
